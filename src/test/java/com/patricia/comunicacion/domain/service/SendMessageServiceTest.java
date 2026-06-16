@@ -42,7 +42,7 @@ class SendMessageServiceTest {
     }
 
     @Test
-    @DisplayName("Debería persistir, publicar en Redis y emitir evento Kafka")
+    @DisplayName("Debería persistir, publicar en Redis y emitir evento de mensajería")
     void execute_shouldPersistBroadcastAndPublishEvent() {
         Message saved = Message.builder()
                 .id("msg-789").parcheId(PARCHE_ID).senderId(USER_ID)
@@ -73,8 +73,8 @@ class SendMessageServiceTest {
     }
 
     @Test
-    @DisplayName("Los mensajes SYSTEM no deben generar evento Kafka")
-    void execute_systemMessageShouldNotPublishKafkaEvent() {
+    @DisplayName("Los mensajes SYSTEM no deben generar evento de mensajería")
+    void execute_systemMessageShouldNotPublishEvent() {
         Message saved = Message.systemMessage(PARCHE_ID, "Juan se unió");
         doNothing().when(membershipVerification).verify(any(), any());
         when(messageRepository.save(any())).thenReturn(saved);

@@ -1,11 +1,11 @@
 package com.patricia.comunicacion;
 
+import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
-import org.springframework.kafka.annotation.EnableKafka;
 
 @SpringBootApplication
-@EnableKafka
+@EnableRabbit
 public class ComunicacionApplication {
 
 	public static void main(String[] args) {

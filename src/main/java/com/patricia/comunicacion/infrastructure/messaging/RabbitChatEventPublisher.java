@@ -1,26 +1,27 @@
 package com.patricia.comunicacion.infrastructure.messaging;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.domain.port.out.EventPublisher;
+import com.patricia.comunicacion.infrastructure.config.RabbitMQConfig;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 
+/**
+ * Publica chat.pendiente hacia Notificaciones. Antes salía por Kafka; ahora
+ * que toda la mensajería de PATRICI.A corre sobre RabbitMQ, usa el mismo
+ * broker — mismo nombre de evento y misma forma de payload, solo cambió el
+ * transporte.
+ */
 @Slf4j
 @Component
 @RequiredArgsConstructor
-public class KafkaEventPublisher implements EventPublisher {
+public class RabbitChatEventPublisher implements EventPublisher {
 
-    private final KafkaTemplate<String, String> kafkaTemplate;
-    private final ObjectMapper objectMapper;
-
-    @Value("${kafka.topics.chat-pendiente}")
-    private String chatPendienteTopic;
+    private final RabbitTemplate rabbitTemplate;
 
     @Override
     public void publishChatPendiente(Message message) {
@@ -35,18 +36,13 @@ public class KafkaEventPublisher implements EventPublisher {
                     message.getSentAt()
             );
 
-            String payload = objectMapper.writeValueAsString(event);
-
-            kafkaTemplate.send(chatPendienteTopic, message.getParcheId(), payload)
-                    .whenComplete((result, ex) -> {
-                        if (ex != null) {
-                            log.error("Error publicando chat.pendiente [messageId={}]",
-                                    message.getId(), ex);
-                        }
-                    });
+            rabbitTemplate.convertAndSend(
+                    RabbitMQConfig.COMUNICACION_EXCHANGE,
+                    RabbitMQConfig.CHAT_PENDIENTE_ROUTING_KEY,
+                    event);
 
         } catch (Exception e) {
-            log.error("Error serializando evento chat.pendiente", e);
+            log.error("Error publicando chat.pendiente [messageId={}]", message.getId(), e);
         }
     }
 
