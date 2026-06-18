@@ -3,6 +3,7 @@ package com.patricia.comunicacion.infrastructure.messaging;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.domain.port.out.MessageBroker;
+import com.patricia.comunicacion.infrastructure.web.dto.ChatMessagePayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -23,7 +24,7 @@ public class RedisMessageBrokerAdapter implements MessageBroker {
     public void publish(String parcheId, Message message) {
         try {
             redisTemplate.convertAndSend(CHAT_PREFIX + parcheId,
-                    objectMapper.writeValueAsString(message));
+                    objectMapper.writeValueAsString(ChatMessagePayload.fromDomain(message)));
         } catch (Exception e) {
             log.error("Error publicando en Redis [parcheId={}]", parcheId, e);
         }

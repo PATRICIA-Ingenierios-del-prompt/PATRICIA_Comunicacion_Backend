@@ -1,7 +1,6 @@
 package com.patricia.comunicacion.infrastructure.messaging;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.infrastructure.web.dto.ChatMessagePayload;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -25,10 +24,11 @@ public class RedisChatSubscriber implements MessageListener {
     @Override
     public void onMessage(org.springframework.data.redis.connection.Message redisMsg, byte[] pattern) {
         try {
-            Message message = objectMapper.readValue(new String(redisMsg.getBody()), Message.class);
+            ChatMessagePayload payload = objectMapper.readValue(
+                    new String(redisMsg.getBody()), ChatMessagePayload.class);
             messagingTemplate.convertAndSend(
-                    "/topic/chat/" + message.getParcheId(),
-                    ChatMessagePayload.fromDomain(message));
+                    "/topic/chat/" + payload.getParcheId(),
+                    payload);
         } catch (Exception e) {
             log.error("Error procesando mensaje de Redis", e);
         }
