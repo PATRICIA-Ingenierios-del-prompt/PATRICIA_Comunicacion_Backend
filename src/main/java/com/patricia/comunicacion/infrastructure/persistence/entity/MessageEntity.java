@@ -36,6 +36,10 @@ public class MessageEntity {
     @Column(columnDefinition = "TEXT", nullable = false)
     private String content;
 
+    /** URL del archivo adjunto — solo presente para tipo FILE o IMAGE. */
+    @Column(name = "file_url")
+    private String fileUrl;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MessageType type;

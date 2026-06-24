@@ -6,11 +6,11 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JavaTypeMapper;
 import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.amqp.support.converter.Jackson2JavaTypeMapper;
 
 /**
  * Configuración de mensajería con Parches Core vía RabbitMQ.
@@ -37,16 +37,23 @@ public class RabbitMQConfig {
     public static final String PARCHE_CREATED_QUEUE         = "comunicacion.parche.created.queue";
     public static final String PARCHE_MEMBER_JOINED_QUEUE   = "comunicacion.parche.member.joined.queue";
     public static final String PARCHE_MEMBER_EXPELLED_QUEUE = "comunicacion.parche.member.expelled.queue";
+    public static final String PARCHE_DELETED_QUEUE         = "comunicacion.parche.deleted.queue";
+    public static final String PARCHE_DELETED_ROUTING_KEY   = "parche.deleted";
 
     // ---------- Outbound: respuesta que nosotros publicamos y Parches consume ----------
     public static final String COMMUNICATION_READY_ROUTING_KEY = "parche.communication.ready";
 
     // ---------- Exchange propio: eventos que Comunicación emite hacia Notificaciones ----------
-    // Reemplaza el topic de Kafka chat.pendiente — Notificaciones (cuando exista)
-    // declara su propia cola enlazada a este exchange, igual que nosotros
-    // hacemos con el exchange de Parches.
     public static final String COMUNICACION_EXCHANGE = "comunicacion.events";
-    public static final String CHAT_PENDIENTE_ROUTING_KEY = "chat.pendiente";
+
+    // Chat
+    public static final String CHAT_MESSAGE_SENT_ROUTING_KEY    = "chat.message.sent";
+
+    // Voz
+    public static final String VOICE_CALL_STARTED_ROUTING_KEY   = "voice.call.started";
+    public static final String VOICE_CALL_ENDED_ROUTING_KEY     = "voice.call.ended";
+    public static final String VOICE_PARTICIPANT_JOINED_ROUTING_KEY = "voice.participant.joined";
+    public static final String VOICE_PARTICIPANT_LEFT_ROUTING_KEY   = "voice.participant.left";
 
     @Bean
     public TopicExchange parcheExchange() {
@@ -74,6 +81,11 @@ public class RabbitMQConfig {
     }
 
     @Bean
+    public Queue parcheDeletedQueue() {
+        return new Queue(PARCHE_DELETED_QUEUE, true);
+    }
+
+    @Bean
     public Binding parcheCreatedBinding() {
         return BindingBuilder.bind(parcheCreatedQueue())
                 .to(parcheExchange())
@@ -94,6 +106,13 @@ public class RabbitMQConfig {
                 .with(PARCHE_MEMBER_EXPELLED_ROUTING_KEY);
     }
 
+    @Bean
+    public Binding parcheDeletedBinding() {
+        return BindingBuilder.bind(parcheDeletedQueue())
+                .to(parcheExchange())
+                .with(PARCHE_DELETED_ROUTING_KEY);
+    }
+
     /**
      * IMPORTANTE: TypePrecedence.INFERRED hace que el converter use el tipo
      * del parámetro del método @RabbitListener para deserializar, en vez de
@@ -112,7 +131,6 @@ public class RabbitMQConfig {
         converter.setTypePrecedence(Jackson2JavaTypeMapper.TypePrecedence.INFERRED);
         return converter;
     }
-
 
     @Bean
     public RabbitTemplate rabbitTemplate(ConnectionFactory connectionFactory, MessageConverter messageConverter) {

@@ -62,6 +62,7 @@ public class MessageRepositoryAdapter implements MessageRepository {
         e.setSenderId(m.getSenderId());
         e.setSenderUsername(m.getSenderUsername());
         e.setContent(m.getContent());
+        e.setFileUrl(m.getFileUrl());
         e.setType(m.getType());
         e.setSentAt(m.getSentAt());
         e.setReadBy(m.getReadBy() != null ? m.getReadBy() : new HashSet<>());
@@ -76,6 +77,7 @@ public class MessageRepositoryAdapter implements MessageRepository {
                 .senderId(e.getSenderId())
                 .senderUsername(e.getSenderUsername())
                 .content(e.getContent())
+                .fileUrl(e.getFileUrl())
                 .type(e.getType())
                 .sentAt(e.getSentAt())
                 .readBy(e.getReadBy())

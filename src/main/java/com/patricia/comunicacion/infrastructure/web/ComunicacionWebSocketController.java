@@ -53,7 +53,12 @@ public class ComunicacionWebSocketController {
         String username = getAttribute(headerAccessor, "username");
         MessageType type = payload.getType() != null ? payload.getType() : MessageType.TEXT;
 
-        sendMessageUseCase.execute(parcheId, userId, username, payload.getContent(), type);
+        if (payload.getFileUrl() != null && !payload.getFileUrl().isBlank()) {
+            sendMessageUseCase.executeWithFile(parcheId, userId, username,
+                    payload.getContent(), type, payload.getFileUrl());
+        } else {
+            sendMessageUseCase.execute(parcheId, userId, username, payload.getContent(), type);
+        }
     }
 
     @MessageMapping("/chat.read/{parcheId}")

@@ -1,9 +1,11 @@
 package com.patricia.comunicacion.infrastructure.messaging;
 
 import com.patricia.comunicacion.domain.port.in.ManageVoiceSessionUseCase;
+import com.patricia.comunicacion.domain.port.out.MessageRepository;
 import com.patricia.comunicacion.infrastructure.config.RabbitMQConfig;
 import com.patricia.comunicacion.infrastructure.messaging.event.CommunicationReadyEvent;
 import com.patricia.comunicacion.infrastructure.messaging.event.ParcheCreatedEvent;
+import com.patricia.comunicacion.infrastructure.messaging.event.ParcheDeletedEvent;
 import com.patricia.comunicacion.infrastructure.messaging.event.ParcheMemberExpelledEvent;
 import com.patricia.comunicacion.infrastructure.messaging.event.ParcheMemberJoinedEvent;
 import com.patricia.comunicacion.infrastructure.persistence.entity.ParcheChannelEntity;
@@ -40,6 +42,7 @@ public class ParcheLifecycleListener {
     private final ParcheChannelJpaRepository channelRepository;
     private final ParcheMemberJpaRepository memberRepository;
     private final ManageVoiceSessionUseCase manageVoiceSessionUseCase;
+    private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final RabbitTemplate rabbitTemplate;
 
@@ -102,6 +105,46 @@ public class ParcheLifecycleListener {
         memberRepository.save(member);
 
         log.info("parche.member.joined procesado [parcheId={}, memberId={}]", parcheId, memberId);
+    }
+
+    /**
+     * El parche fue borrado — limpiamos todo lo que le pertenecía en Comunicación:
+     * 1. Desconectamos a todos los participantes activos en voz.
+     * 2. Borramos la caché de membresía local.
+     * 3. Borramos el registro de canales (chatId/voiceId).
+     * 4. Avisamos a todos los clientes WebSocket conectados.
+     *
+     * El historial de mensajes (tabla messages) se conserva por trazabilidad —
+     * simplemente ya no será accesible porque el parche dejó de existir.
+     */
+    @RabbitListener(queues = RabbitMQConfig.PARCHE_DELETED_QUEUE)
+    @Transactional
+    public void onParcheDeleted(ParcheDeletedEvent event) {
+        String parcheId = event.getParcheId().toString();
+        log.warn("parche.deleted recibido — limpiando recursos [parcheId={}]", parcheId);
+
+        // 1. Forzar desconexión de todos los participantes activos en voz
+        manageVoiceSessionUseCase.getActiveParticipants(parcheId)
+                .forEach(session -> {
+                    manageVoiceSessionUseCase.forceDisconnect(parcheId, session.getUserId());
+                    messagingTemplate.convertAndSendToUser(
+                            session.getUserId(),
+                            "/queue/kicked",
+                            Map.of("parcheId", parcheId, "reason", "El parche fue eliminado"));
+                });
+
+        // 2. Limpiar membresías locales
+        memberRepository.deleteAllByParcheId(parcheId);
+
+        // 3. Limpiar registro de canales
+        channelRepository.deleteById(parcheId);
+
+        // 4. Notificar al canal de chat que fue cerrado
+        messagingTemplate.convertAndSend(
+                "/topic/chat/" + parcheId,
+                (Object) Map.of("type", "PARCHE_DELETED", "parcheId", parcheId));
+
+        log.warn("Recursos de comunicación eliminados [parcheId={}]", parcheId);
     }
 
     @RabbitListener(queues = RabbitMQConfig.PARCHE_MEMBER_EXPELLED_QUEUE)

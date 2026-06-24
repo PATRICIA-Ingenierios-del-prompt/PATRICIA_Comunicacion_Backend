@@ -2,8 +2,6 @@ package com.patricia.comunicacion.infrastructure.web.dto;
 
 import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.domain.model.MessageType;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -18,11 +16,16 @@ import java.util.Set;
 @AllArgsConstructor
 public class ChatMessagePayload {
 
-    @NotBlank
-    @Size(max = 2000)
     private String content;
-
     private MessageType type;
+
+    /**
+     * URL del archivo — obligatorio cuando type = FILE o IMAGE.
+     * El cliente sube el archivo previamente al storage y pasa la URL aquí.
+     */
+    private String fileUrl;
+
+    // Campos de respuesta (los rellena el servidor al hacer broadcast)
     private String messageId;
     private String senderId;
     private String senderUsername;
@@ -34,6 +37,7 @@ public class ChatMessagePayload {
         return ChatMessagePayload.builder()
                 .messageId(m.getId())
                 .content(m.getContent())
+                .fileUrl(m.getFileUrl())
                 .type(m.getType())
                 .senderId(m.getSenderId())
                 .senderUsername(m.getSenderUsername())

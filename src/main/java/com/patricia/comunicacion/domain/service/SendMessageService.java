@@ -30,6 +30,20 @@ public class SendMessageService implements SendMessageUseCase {
     @Override
     public Message execute(String parcheId, String senderId, String senderUsername,
                            String content, MessageType type) {
+        return doSave(parcheId, senderId, senderUsername, content, type, null);
+    }
+
+    @Override
+    public Message executeWithFile(String parcheId, String senderId, String senderUsername,
+                                    String content, MessageType type, String fileUrl) {
+        if (type != MessageType.FILE && type != MessageType.IMAGE) {
+            throw new IllegalArgumentException("executeWithFile solo aplica para FILE o IMAGE");
+        }
+        return doSave(parcheId, senderId, senderUsername, content, type, fileUrl);
+    }
+
+    private Message doSave(String parcheId, String senderId, String senderUsername,
+                            String content, MessageType type, String fileUrl) {
         membershipVerification.verify(parcheId, senderId);
 
         Message message = Message.builder()
@@ -37,6 +51,7 @@ public class SendMessageService implements SendMessageUseCase {
                 .senderId(senderId)
                 .senderUsername(senderUsername)
                 .content(content)
+                .fileUrl(fileUrl)
                 .type(type)
                 .sentAt(Instant.now())
                 .deleted(false)
@@ -44,12 +59,10 @@ public class SendMessageService implements SendMessageUseCase {
 
         Message saved = messageRepository.save(message);
 
-        // Sync con otras instancias via Redis Pub/Sub
         messageBroker.publish(parcheId, saved);
 
-        // Notificar a Notificaciones (solo mensajes de usuario)
         if (type != MessageType.SYSTEM) {
-            eventPublisher.publishChatPendiente(saved);
+            eventPublisher.publishMessageSent(saved);
         }
 
         return saved;
