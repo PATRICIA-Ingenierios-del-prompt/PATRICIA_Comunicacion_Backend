@@ -12,6 +12,7 @@ import com.patricia.comunicacion.infrastructure.persistence.entity.ParcheChannel
 import com.patricia.comunicacion.infrastructure.persistence.entity.ParcheMemberEntity;
 import com.patricia.comunicacion.infrastructure.persistence.repository.ParcheChannelJpaRepository;
 import com.patricia.comunicacion.infrastructure.persistence.repository.ParcheMemberJpaRepository;
+import com.patricia.comunicacion.infrastructure.ws.ComunicacionBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -45,6 +46,8 @@ public class ParcheLifecycleListener {
     private final MessageRepository messageRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final RabbitTemplate rabbitTemplate;
+    private final ComunicacionBroadcaster broadcaster;
+
 
     @RabbitListener(queues = RabbitMQConfig.PARCHE_CREATED_QUEUE)
     @Transactional
@@ -140,9 +143,9 @@ public class ParcheLifecycleListener {
         channelRepository.deleteById(parcheId);
 
         // 4. Notificar al canal de chat que fue cerrado
-        messagingTemplate.convertAndSend(
+        broadcaster.broadcast(
                 "/topic/chat/" + parcheId,
-                (Object) Map.of("type", "PARCHE_DELETED", "parcheId", parcheId));
+                Map.of("type", "PARCHE_DELETED", "parcheId", parcheId));
 
         log.warn("Recursos de comunicación eliminados [parcheId={}]", parcheId);
     }

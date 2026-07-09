@@ -5,6 +5,7 @@ import com.patricia.comunicacion.domain.port.in.ManageVoiceSessionUseCase;
 import com.patricia.comunicacion.domain.port.in.SendMessageUseCase;
 import com.patricia.comunicacion.infrastructure.web.dto.ChatMessagePayload;
 import com.patricia.comunicacion.infrastructure.web.dto.VoiceSignalPayload;
+import com.patricia.comunicacion.infrastructure.ws.ComunicacionBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -40,6 +41,8 @@ public class ComunicacionWebSocketController {
     private final SendMessageUseCase sendMessageUseCase;
     private final ManageVoiceSessionUseCase manageVoiceSessionUseCase;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ComunicacionBroadcaster broadcaster;
+
 
     // ── Chat ────────────────────────────────────────────────────────
 
@@ -82,7 +85,7 @@ public class ComunicacionWebSocketController {
         manageVoiceSessionUseCase.joinVoiceChannel(parcheId, userId, username,
                 UUID.randomUUID().toString());
 
-        messagingTemplate.convertAndSend("/topic/voice/" + parcheId,
+        broadcaster.broadcast("/topic/voice/" + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.JOIN)
                         .senderUserId(userId)
@@ -102,7 +105,7 @@ public class ComunicacionWebSocketController {
             messagingTemplate.convertAndSendToUser(
                     signal.getTargetUserId(), "/queue/voice-signal", signal);
         } else {
-            messagingTemplate.convertAndSend("/topic/voice/" + parcheId, signal);
+            broadcaster.broadcast("/topic/voice/" + parcheId, signal);
         }
     }
 
@@ -116,7 +119,7 @@ public class ComunicacionWebSocketController {
 
         manageVoiceSessionUseCase.leaveVoiceChannel(parcheId, userId);
 
-        messagingTemplate.convertAndSend("/topic/voice/" + parcheId,
+        broadcaster.broadcast("/topic/voice/" + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.LEAVE)
                         .senderUserId(userId)
