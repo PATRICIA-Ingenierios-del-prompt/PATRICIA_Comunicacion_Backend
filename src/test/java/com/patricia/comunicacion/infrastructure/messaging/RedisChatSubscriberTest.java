@@ -45,18 +45,20 @@ class RedisChatSubscriberTest {
 
     @Test
     @DisplayName("onMessage debería reenviar el mensaje al topic correcto via STOMP")
-    void onMessage_shouldForwardToStompTopic() throws Exception {
-        Message message = Message.builder()
-                .id("msg-001").parcheId("parche-001").senderId("user-001")
-                .senderUsername("david").content("Hola!").type(MessageType.TEXT)
-                .sentAt(Instant.now()).deleted(false).build();
+    void onMessage_shouldForwardToStompTopic() {
+        // JSON con fecha en formato ISO (como lo serializa Jackson con JavaTimeModule)
+        String json = """
+            {"id":"msg-001","parcheId":"parche-001","senderId":"user-001",
+            "senderUsername":"david","content":"Hola!","fileUrl":null,
+            "type":"TEXT","sentAt":"2026-01-01T00:00:00Z","readBy":null,"deleted":false}
+            """;
 
-        byte[] body = objectMapper.writeValueAsBytes(message);
-        var redisMsg = redisMessage("chat:parche-001".getBytes(), body);
+        var redisMsg = redisMessage("chat:parche-001".getBytes(), json.getBytes());
 
         subscriber.onMessage(redisMsg, null);
 
-        verify(messagingTemplate).convertAndSend(eq("/topic/chat/parche-001"), any(Object.class));
+        verify(messagingTemplate).convertAndSend(
+                eq("/topic/chat/parche-001"), any(Object.class));
     }
 
     @Test
