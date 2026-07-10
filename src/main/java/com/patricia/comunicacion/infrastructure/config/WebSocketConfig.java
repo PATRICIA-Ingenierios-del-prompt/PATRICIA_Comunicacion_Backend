@@ -1,42 +1,47 @@
 package com.patricia.comunicacion.infrastructure.config;
 
-import com.patricia.comunicacion.infrastructure.security.JwtFilter;
+import com.patricia.comunicacion.infrastructure.security.StompAuthInterceptor;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.messaging.Message;
-import org.springframework.messaging.MessageChannel;
 import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
-import org.springframework.messaging.simp.stomp.StompCommand;
-import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
-import org.springframework.messaging.support.ChannelInterceptor;
-import org.springframework.messaging.support.MessageHeaderAccessor;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-import java.util.List;
-import java.util.Objects;
-
-@Slf4j
+/**
+ * Configuración STOMP del microservicio de Comunicación.
+ *
+ * Endpoints expuestos:
+ *   /ws       — con SockJS (fallback HTTP, útil para navegadores sin WS nativo)
+ *   /ws-stomp — WebSocket nativo puro, para el gateway de AWS (ALB ws://)
+ *
+ * El gateway enruta ws://<host>/ws-stomp/* hacia las instancias de este servicio.
+ * La autenticación JWT se verifica en el frame CONNECT via StompAuthInterceptor.
+ */
 @Configuration
 @EnableWebSocketMessageBroker
 @RequiredArgsConstructor
 public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
-    private final JwtFilter jwtFilter;
+    private final StompAuthInterceptor stompAuthInterceptor;
 
     @Override
     public void registerStompEndpoints(StompEndpointRegistry registry) {
+        // Con SockJS — para desarrollo local y clientes web que no soportan WS nativo
         registry.addEndpoint("/ws")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();
+
+        // WebSocket nativo — para el gateway de AWS (ALB / API Gateway WebSocket)
+        registry.addEndpoint("/ws-stomp")
+                .setAllowedOriginPatterns("*");
     }
 
     @Override
     public void configureMessageBroker(MessageBrokerRegistry config) {
+        // Broker simple en memoria — reemplazar por RabbitMQ STOMP broker
+        // si se necesita escalar horizontalmente (múltiples instancias)
         config.enableSimpleBroker("/topic", "/queue");
         config.setApplicationDestinationPrefixes("/app");
         config.setUserDestinationPrefix("/user");
@@ -44,38 +49,6 @@ public class WebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     @Override
     public void configureClientInboundChannel(ChannelRegistration registration) {
-        registration.interceptors(new ChannelInterceptor() {
-            @Override
-            public Message<?> preSend(Message<?> message, MessageChannel channel) {
-                StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
-                        message, StompHeaderAccessor.class);
-
-                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
-                    String authHeader = accessor.getFirstNativeHeader("Authorization");
-                    if (authHeader != null && authHeader.startsWith("Bearer ")) {
-                        String token = authHeader.substring(7);
-                        try {
-                            var claims = jwtFilter.parseClaims(token);
-                            String userId   = claims.getSubject();
-                            String username = claims.get("username", String.class);
-
-                            Objects.requireNonNull(accessor.getSessionAttributes())
-                                    .put("userId", userId);
-                            accessor.getSessionAttributes().put("username", username);
-                            accessor.setUser(new UsernamePasswordAuthenticationToken(
-                                    userId, null, List.of()));
-
-                            log.debug("WS CONNECT autenticado [userId={}]", userId);
-                        } catch (Exception e) {
-                            log.warn("WS CONNECT rechazado: token inválido");
-                            return null;
-                        }
-                    } else {
-                        return null;
-                    }
-                }
-                return message;
-            }
-        });
+        registration.interceptors(stompAuthInterceptor);
     }
 }

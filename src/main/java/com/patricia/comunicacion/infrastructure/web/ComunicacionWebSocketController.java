@@ -5,6 +5,7 @@ import com.patricia.comunicacion.domain.port.in.ManageVoiceSessionUseCase;
 import com.patricia.comunicacion.domain.port.in.SendMessageUseCase;
 import com.patricia.comunicacion.infrastructure.web.dto.ChatMessagePayload;
 import com.patricia.comunicacion.infrastructure.web.dto.VoiceSignalPayload;
+import com.patricia.comunicacion.infrastructure.ws.ComunicacionBroadcaster;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.handler.annotation.DestinationVariable;
@@ -37,9 +38,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ComunicacionWebSocketController {
 
+    private static final String VOICE_TOPIC = "/topic/voice/";
+
     private final SendMessageUseCase sendMessageUseCase;
     private final ManageVoiceSessionUseCase manageVoiceSessionUseCase;
     private final SimpMessagingTemplate messagingTemplate;
+    private final ComunicacionBroadcaster broadcaster;
 
     // ── Chat ────────────────────────────────────────────────────────
 
@@ -53,7 +57,12 @@ public class ComunicacionWebSocketController {
         String username = getAttribute(headerAccessor, "username");
         MessageType type = payload.getType() != null ? payload.getType() : MessageType.TEXT;
 
-        sendMessageUseCase.execute(parcheId, userId, username, payload.getContent(), type);
+        if (payload.getFileUrl() != null && !payload.getFileUrl().isBlank()) {
+            sendMessageUseCase.executeWithFile(parcheId, userId, username,
+                    payload.getContent(), type, payload.getFileUrl());
+        } else {
+            sendMessageUseCase.execute(parcheId, userId, username, payload.getContent(), type);
+        }
     }
 
     @MessageMapping("/chat.read/{parcheId}")
@@ -77,7 +86,7 @@ public class ComunicacionWebSocketController {
         manageVoiceSessionUseCase.joinVoiceChannel(parcheId, userId, username,
                 UUID.randomUUID().toString());
 
-        messagingTemplate.convertAndSend("/topic/voice/" + parcheId,
+        broadcaster.broadcast(VOICE_TOPIC + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.JOIN)
                         .senderUserId(userId)
@@ -97,7 +106,7 @@ public class ComunicacionWebSocketController {
             messagingTemplate.convertAndSendToUser(
                     signal.getTargetUserId(), "/queue/voice-signal", signal);
         } else {
-            messagingTemplate.convertAndSend("/topic/voice/" + parcheId, signal);
+            broadcaster.broadcast(VOICE_TOPIC + parcheId, signal);
         }
     }
 
@@ -111,7 +120,7 @@ public class ComunicacionWebSocketController {
 
         manageVoiceSessionUseCase.leaveVoiceChannel(parcheId, userId);
 
-        messagingTemplate.convertAndSend("/topic/voice/" + parcheId,
+        broadcaster.broadcast(VOICE_TOPIC + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.LEAVE)
                         .senderUserId(userId)

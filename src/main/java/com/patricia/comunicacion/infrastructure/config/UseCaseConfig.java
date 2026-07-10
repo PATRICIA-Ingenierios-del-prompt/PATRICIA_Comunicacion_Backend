@@ -34,7 +34,9 @@ public class UseCaseConfig {
     public ManageVoiceSessionUseCase manageVoiceSessionUseCase(
             com.patricia.comunicacion.domain.port.out.VoiceSessionRepository voiceSessionRepository,
             MembershipVerification membershipVerification,
-            MessageBroker messageBroker) {
-        return new ManageVoiceChannelService(voiceSessionRepository, membershipVerification, messageBroker);
+            MessageBroker messageBroker,
+            EventPublisher eventPublisher) {
+        return new ManageVoiceChannelService(voiceSessionRepository, membershipVerification,
+                messageBroker, eventPublisher);
     }
 }

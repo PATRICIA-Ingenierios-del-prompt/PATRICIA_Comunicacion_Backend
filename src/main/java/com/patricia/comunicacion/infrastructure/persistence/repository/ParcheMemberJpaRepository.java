@@ -15,4 +15,8 @@ public interface ParcheMemberJpaRepository extends JpaRepository<ParcheMemberEnt
     @Modifying
     @Query("DELETE FROM ParcheMemberEntity m WHERE m.parcheId = :parcheId AND m.userId = :userId")
     void deleteByParcheIdAndUserId(@Param("parcheId") String parcheId, @Param("userId") String userId);
+
+    @Modifying
+    @Query("DELETE FROM ParcheMemberEntity m WHERE m.parcheId = :parcheId")
+    void deleteAllByParcheId(@Param("parcheId") String parcheId);
 }

@@ -56,7 +56,7 @@ class SendMessageServiceTest {
 
         assertThat(result.getId()).isEqualTo("msg-789");
         verify(messageBroker).publish(PARCHE_ID, saved);
-        verify(eventPublisher).publishChatPendiente(saved);
+        verify(eventPublisher).publishMessageSent(saved);
     }
 
     @Test
@@ -81,7 +81,7 @@ class SendMessageServiceTest {
 
         service.execute(PARCHE_ID, "SYSTEM", "PATRICI.A", "Juan se unió", MessageType.SYSTEM);
 
-        verify(eventPublisher, never()).publishChatPendiente(any());
+        verify(eventPublisher, never()).publishMessageSent(any());
     }
 
     @Test
@@ -92,5 +92,53 @@ class SendMessageServiceTest {
         service.markAsRead(PARCHE_ID, USER_ID);
 
         verify(messageRepository).markAllAsReadByUser(PARCHE_ID, USER_ID);
+    }
+
+    @Test
+    @DisplayName("executeWithFile debería persistir mensaje con fileUrl")
+    void executeWithFile_shouldPersistWithFileUrl() {
+        Message saved = Message.builder()
+                .id("msg-file-001").parcheId(PARCHE_ID).senderId(USER_ID)
+                .senderUsername("juandc").content("doc.pdf").type(MessageType.FILE)
+                .fileUrl("https://storage.example.com/doc.pdf")
+                .sentAt(Instant.now()).deleted(false).build();
+
+        doNothing().when(membershipVerification).verify(PARCHE_ID, USER_ID);
+        when(messageRepository.save(any())).thenReturn(saved);
+
+        Message result = service.executeWithFile(PARCHE_ID, USER_ID, "juandc",
+                "doc.pdf", MessageType.FILE, "https://storage.example.com/doc.pdf");
+
+        assertThat(result.getFileUrl()).isEqualTo("https://storage.example.com/doc.pdf");
+        verify(eventPublisher).publishMessageSent(saved);
+    }
+
+    @Test
+    @DisplayName("executeWithFile con tipo TEXT debe lanzar IllegalArgumentException")
+    void executeWithFile_shouldThrowForTextType() {
+        assertThatThrownBy(() ->
+                service.executeWithFile(PARCHE_ID, USER_ID, "juandc",
+                        "hola", MessageType.TEXT, "https://example.com/file"))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("FILE o IMAGE");
+    }
+
+    @Test
+    @DisplayName("executeWithFile con tipo IMAGE debería funcionar correctamente")
+    void executeWithFile_shouldAcceptImageType() {
+        Message saved = Message.builder()
+                .id("msg-img-001").parcheId(PARCHE_ID).senderId(USER_ID)
+                .senderUsername("juandc").content("foto.jpg").type(MessageType.IMAGE)
+                .fileUrl("https://storage.example.com/foto.jpg")
+                .sentAt(Instant.now()).deleted(false).build();
+
+        doNothing().when(membershipVerification).verify(PARCHE_ID, USER_ID);
+        when(messageRepository.save(any())).thenReturn(saved);
+
+        Message result = service.executeWithFile(PARCHE_ID, USER_ID, "juandc",
+                "foto.jpg", MessageType.IMAGE, "https://storage.example.com/foto.jpg");
+
+        assertThat(result.getType()).isEqualTo(MessageType.IMAGE);
+        verify(eventPublisher).publishMessageSent(saved);
     }
 }
