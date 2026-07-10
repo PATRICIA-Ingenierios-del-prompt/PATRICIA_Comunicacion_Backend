@@ -34,7 +34,8 @@ public class StompAuthInterceptor implements ChannelInterceptor {
     private final JwtFilter jwtFilter;
 
     @Override
-    public @Nullable Message<?> preSend(Message<?> message, MessageChannel channel) {
+    @SuppressWarnings("java:S2589")
+    public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
                 message, StompHeaderAccessor.class);
 
