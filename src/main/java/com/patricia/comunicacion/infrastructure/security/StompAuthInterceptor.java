@@ -10,6 +10,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Component;
+import org.jspecify.annotations.Nullable;
 
 import java.util.List;
 import java.util.Objects;
@@ -33,8 +34,7 @@ public class StompAuthInterceptor implements ChannelInterceptor {
     private final JwtFilter jwtFilter;
 
     @Override
-    @SuppressWarnings("NullAway")
-    public Message<?> preSend(Message<?> message, MessageChannel channel) {
+    public @Nullable Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
                 message, StompHeaderAccessor.class);
 

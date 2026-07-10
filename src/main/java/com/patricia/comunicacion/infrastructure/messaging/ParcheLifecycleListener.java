@@ -47,6 +47,7 @@ public class ParcheLifecycleListener {
     private final SimpMessagingTemplate messagingTemplate;
     private final RabbitTemplate rabbitTemplate;
     private final ComunicacionBroadcaster broadcaster;
+    private static final String PARCHE_ID_KEY = "parcheId";
 
 
     @RabbitListener(queues = RabbitMQConfig.PARCHE_CREATED_QUEUE)
@@ -133,7 +134,8 @@ public class ParcheLifecycleListener {
                     messagingTemplate.convertAndSendToUser(
                             session.getUserId(),
                             "/queue/kicked",
-                            Map.of("parcheId", parcheId, "reason", "El parche fue eliminado"));
+                            Map.of(PARCHE_ID_KEY, parcheId, "reason", "El parche fue eliminado")
+                    );
                 });
 
         // 2. Limpiar membresías locales
@@ -145,7 +147,7 @@ public class ParcheLifecycleListener {
         // 4. Notificar al canal de chat que fue cerrado
         broadcaster.broadcast(
                 "/topic/chat/" + parcheId,
-                Map.of("type", "PARCHE_DELETED", "parcheId", parcheId));
+                Map.of("type", "PARCHE_DELETED", PARCHE_ID_KEY, parcheId));
 
         log.warn("Recursos de comunicación eliminados [parcheId={}]", parcheId);
     }
@@ -164,6 +166,6 @@ public class ParcheLifecycleListener {
         messagingTemplate.convertAndSendToUser(
                 memberId,
                 "/queue/kicked",
-                Map.of("parcheId", parcheId, "reason", "Fuiste expulsado del parche"));
+                Map.of(PARCHE_ID_KEY, parcheId, "reason", "Fuiste expulsado del parche"));
     }
 }
