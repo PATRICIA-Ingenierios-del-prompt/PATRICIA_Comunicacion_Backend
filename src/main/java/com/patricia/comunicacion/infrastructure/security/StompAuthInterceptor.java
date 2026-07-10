@@ -10,7 +10,7 @@ import org.springframework.messaging.support.ChannelInterceptor;
 import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Component;
-import org.jspecify.annotations.Nullable;
+import org.springframework.lang.Nullable;
 
 import java.util.List;
 import java.util.Objects;
