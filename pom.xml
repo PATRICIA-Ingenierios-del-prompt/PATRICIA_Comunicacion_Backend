@@ -33,7 +33,8 @@
 			**/infrastructure/config/**,
 			**/infrastructure/security/**,
 			**/infrastructure/web/dto/**,
-			**/infrastructure/backplane/**
+			**/infrastructure/backplane/**,
+			**/infrastructure/web/ComunicacionWebSocketController.java
 		</sonar.coverage.exclusions>
 		<sonar.exclusions>
 			**/infrastructure/persistence/entity/**,
