@@ -3,8 +3,6 @@ package com.patricia.comunicacion.domain.port.out;
 import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.domain.model.VoiceSession;
 
-import java.util.List;
-
 /**
  * Puerto de salida para eventos que Comunicación publica al exchange
  * "comunicacion.events", dirigidos principalmente a Notificaciones.

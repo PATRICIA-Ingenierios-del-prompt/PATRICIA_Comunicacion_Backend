@@ -38,11 +38,12 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class ComunicacionWebSocketController {
 
+    private static final String VOICE_TOPIC = "/topic/voice/";
+
     private final SendMessageUseCase sendMessageUseCase;
     private final ManageVoiceSessionUseCase manageVoiceSessionUseCase;
     private final SimpMessagingTemplate messagingTemplate;
     private final ComunicacionBroadcaster broadcaster;
-
 
     // ── Chat ────────────────────────────────────────────────────────
 
@@ -85,7 +86,7 @@ public class ComunicacionWebSocketController {
         manageVoiceSessionUseCase.joinVoiceChannel(parcheId, userId, username,
                 UUID.randomUUID().toString());
 
-        broadcaster.broadcast("/topic/voice/" + parcheId,
+        broadcaster.broadcast(VOICE_TOPIC + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.JOIN)
                         .senderUserId(userId)
@@ -105,7 +106,7 @@ public class ComunicacionWebSocketController {
             messagingTemplate.convertAndSendToUser(
                     signal.getTargetUserId(), "/queue/voice-signal", signal);
         } else {
-            broadcaster.broadcast("/topic/voice/" + parcheId, signal);
+            broadcaster.broadcast(VOICE_TOPIC + parcheId, signal);
         }
     }
 
@@ -119,7 +120,7 @@ public class ComunicacionWebSocketController {
 
         manageVoiceSessionUseCase.leaveVoiceChannel(parcheId, userId);
 
-        broadcaster.broadcast("/topic/voice/" + parcheId,
+        broadcaster.broadcast(VOICE_TOPIC + parcheId,
                 VoiceSignalPayload.builder()
                         .signalType(VoiceSignalPayload.SignalType.LEAVE)
                         .senderUserId(userId)

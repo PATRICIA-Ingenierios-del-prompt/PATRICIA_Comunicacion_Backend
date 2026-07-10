@@ -15,6 +15,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -34,7 +35,7 @@ class RabbitEventPublisherTest {
     }
 
     @Test
-    @DisplayName("publishMessageSent debería publicar en el exchange correcto")
+    @DisplayName("publishMessageSent debería publicar en el exchange y routing key correctos")
     void publishMessageSent_shouldPublishToCorrectExchange() {
         Message message = Message.builder()
                 .id("msg-001").parcheId(PARCHE_ID).senderId("user-001")
@@ -114,7 +115,6 @@ class RabbitEventPublisherTest {
         doThrow(new RuntimeException("RabbitMQ error")).when(rabbitTemplate)
                 .convertAndSend(anyString(), anyString(), any(Object.class));
 
-        // No debe lanzar excepción
-        publisher.publishMessageSent(message);
+        assertDoesNotThrow(() -> publisher.publishMessageSent(message));
     }
 }

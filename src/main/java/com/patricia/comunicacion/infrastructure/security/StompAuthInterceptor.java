@@ -33,6 +33,7 @@ public class StompAuthInterceptor implements ChannelInterceptor {
     private final JwtFilter jwtFilter;
 
     @Override
+    @SuppressWarnings("NullAway")
     public Message<?> preSend(Message<?> message, MessageChannel channel) {
         StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(
                 message, StompHeaderAccessor.class);

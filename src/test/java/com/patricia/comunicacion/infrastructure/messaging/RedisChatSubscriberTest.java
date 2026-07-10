@@ -11,6 +11,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -46,14 +47,16 @@ class RedisChatSubscriberTest {
                 "\"type\":\"TEXT\",\"sentAt\":\"2026-01-01T00:00:00Z\",\"deleted\":false}";
 
         var redisMsg = redisMessage("chat:parche-001".getBytes(), json.getBytes());
-        subscriber.onMessage(redisMsg, null);
+
+        assertDoesNotThrow(() -> subscriber.onMessage(redisMsg, null));
     }
 
     @Test
     @DisplayName("onMessage debería manejar JSON malformado sin lanzar excepción")
     void onMessage_shouldHandleMalformedJson() {
         var redisMsg = redisMessage("chat:parche-001".getBytes(), "invalid-json".getBytes());
-        subscriber.onMessage(redisMsg, null);
+
+        assertDoesNotThrow(() -> subscriber.onMessage(redisMsg, null));
         verifyNoInteractions(messagingTemplate);
     }
 }

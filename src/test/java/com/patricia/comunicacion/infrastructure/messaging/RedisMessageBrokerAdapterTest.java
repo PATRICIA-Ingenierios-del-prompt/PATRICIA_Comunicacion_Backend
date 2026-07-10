@@ -15,6 +15,7 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Instant;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
@@ -70,8 +71,7 @@ class RedisMessageBrokerAdapterTest {
         doThrow(new RuntimeException("Redis error")).when(redisTemplate)
                 .convertAndSend(anyString(), anyString());
 
-        // No debe lanzar excepción
-        adapter.publish(PARCHE_ID, message);
+        assertDoesNotThrow(() -> adapter.publish(PARCHE_ID, message));
     }
 
     @Test
@@ -80,7 +80,6 @@ class RedisMessageBrokerAdapterTest {
         doThrow(new RuntimeException("Redis error")).when(redisTemplate)
                 .convertAndSend(anyString(), anyString());
 
-        // No debe lanzar excepción
-        adapter.publishForceDisconnect(PARCHE_ID, USER_ID);
+        assertDoesNotThrow(() -> adapter.publishForceDisconnect(PARCHE_ID, USER_ID));
     }
 }
