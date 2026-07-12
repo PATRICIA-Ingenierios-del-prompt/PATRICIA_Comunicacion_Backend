@@ -1,0 +1,15 @@
+# Nombre `communication` (matches ECR/IRSA/secret naming en infra). Si el
+# RouteConfig del Gateway espera otro hostname in-cluster para este MS,
+# revisa que el Service in-cluster coincida.
+apiVersion: v1
+kind: Service
+metadata:
+  name: communication
+  namespace: patricia-app
+  labels: { app: communication }
+spec:
+  type: ClusterIP
+  selector: { app: communication }
+  ports:
+    - port: 8084
+      targetPort: 8084

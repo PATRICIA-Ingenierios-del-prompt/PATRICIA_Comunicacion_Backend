@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.connection.RedisStandaloneConfiguration;
+import org.springframework.data.redis.connection.lettuce.LettuceClientConfiguration;
 import org.springframework.data.redis.connection.lettuce.LettuceConnectionFactory;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.listener.ChannelTopic;
@@ -20,19 +21,20 @@ import org.springframework.messaging.simp.SimpMessagingTemplate;
 /**
  * Backplane de Redis para escala horizontal.
  *
- * Solo activo cuando backplane.enabled=true (variable BACKPLANE_ENABLED en K8s).
- * En dev local, enabled=false y el broker STOMP simple funciona sin backplane.
+ * El factory del Redis de cache (spring.data.redis.*) siempre se crea, para
+ * que la app pueda correr en una region sin Cluster #2 (backplane.enabled=false)
+ * pero manteniendo TLS en el Redis principal. Los beans de pub/sub solo se crean
+ * cuando backplane.enabled=true.
  *
  * TRAMPA DE SPRING BOOT: declarar cualquier RedisConnectionFactory propio apaga
- * los beans auto-configurados. Por eso declaramos TAMBIÉN el factory del Redis
- * de cache (spring.data.redis.*) y lo marcamos @Primary para que RedisChatSubscriber
- * y demás adapters de Comunicación sigan apuntando al Redis correcto.
+ * los beans auto-configurados. Por eso este factory con TLS reemplaza al de
+ * autoconfig -- que por default va sin SSL y falla el handshake contra
+ * ElastiCache (ambos clusters tienen transit_encryption en Ulink_Infra).
  */
 @Configuration
-@ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
 public class BackplaneConfig {
 
-    // ── Redis de cache/estado (spring.data.redis.*) — @Primary ───────────────
+    // ── Redis de cache/estado (spring.data.redis.*) — siempre activo ────────
 
     @Bean
     @Primary
@@ -50,9 +52,10 @@ public class BackplaneConfig {
         return new StringRedisTemplate(factory);
     }
 
-    // ── Redis del backplane (backplane.redis.*) ───────────────────────────────
+    // ── Beans exclusivos del backplane (backplane.redis.*) ──────────────────
 
     @Bean
+    @ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
     public LettuceConnectionFactory backplaneConnectionFactory(BackplaneProperties props) {
         return connectionFactory(
                 props.getRedis().getHost(),
@@ -61,14 +64,14 @@ public class BackplaneConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
     public StringRedisTemplate backplaneRedisTemplate(
             @Qualifier("backplaneConnectionFactory") RedisConnectionFactory factory) {
         return new StringRedisTemplate(factory);
     }
 
-    // ── Beans del backplane ───────────────────────────────────────────────────
-
     @Bean
+    @ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
     public RedisBackplanePublisher redisBackplanePublisher(
             @Qualifier("backplaneRedisTemplate") StringRedisTemplate backplaneRedisTemplate,
             ObjectMapper objectMapper,
@@ -77,6 +80,7 @@ public class BackplaneConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
     public BackplaneStompRelay backplaneStompRelay(
             SimpMessagingTemplate messagingTemplate,
             ObjectMapper objectMapper) {
@@ -84,6 +88,7 @@ public class BackplaneConfig {
     }
 
     @Bean
+    @ConditionalOnProperty(prefix = "backplane", name = "enabled", havingValue = "true")
     public RedisMessageListenerContainer backplaneListenerContainer(
             @Qualifier("backplaneConnectionFactory") RedisConnectionFactory factory,
             BackplaneStompRelay relay,
@@ -94,13 +99,24 @@ public class BackplaneConfig {
         return container;
     }
 
-    // ── Helper ────────────────────────────────────────────────────────────────
+    // ── Helper ──────────────────────────────────────────────────────────────
 
     private LettuceConnectionFactory connectionFactory(String host, int port, String password) {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(host, port);
         if (password != null && !password.isBlank()) {
             config.setPassword(password);
         }
-        return new LettuceConnectionFactory(config);
+        // Ambos clusters ElastiCache (cache y backplane) tienen transit_encryption
+        // habilitado en Ulink_Infra (elasticache-cache hardcoded true; backplane
+        // via var.backplane_tls_enabled con default true). Sin useSsl() aqui, el
+        // handshake TLS falla y el pod queda unready. disablePeerVerification()
+        // porque los certificados AWS-managed no matchean el hostname master.*
+        // sin configurar el truststore del CA de ElastiCache -- el transporte
+        // sigue cifrado, solo no se autentica el servidor.
+        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
+                .useSsl()
+                .disablePeerVerification()
+                .build();
+        return new LettuceConnectionFactory(config, clientConfig);
     }
 }
