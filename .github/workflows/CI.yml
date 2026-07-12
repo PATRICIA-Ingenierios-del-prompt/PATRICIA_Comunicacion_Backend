@@ -1,0 +1,209 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [develop, main]
+  pull_request:
+    branches: [develop, main]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+env:
+  # ECR repo provisionado por Terraform como "patricia-dev/communication"
+  # (module.ecr, var.all_services incluye "communication"). Aunque el proyecto
+  # local se llame "comunicacion" (spring.application.name), la infra usa el
+  # nombre en ingles y los recursos K8s tambien.
+  IMAGE_NAME: patricia-dev/communication
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    # RabbitMQ and Redis are needed for integration tests.
+    # Postgres is managed by Testcontainers (Docker daemon on ubuntu-latest).
+    services:
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        ports:
+          - 5672:5672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          cache: maven
+
+      # Compiles, runs unit tests (Surefire, *Test) + integration tests (Failsafe, *IT),
+      # enforces the 80% coverage gate (-Pcoverage) and packages the jar.
+      - name: Build, test & coverage
+        run: mvn -B clean verify -Pcoverage
+        env:
+          SPRING_RABBITMQ_ADDRESSES: amqp://guest:guest@localhost:5672
+          SPRING_RABBITMQ_USERNAME: guest
+          SPRING_RABBITMQ_PASSWORD: guest
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+
+      # -------------------------------------------------------------------------
+      # SonarCloud quality gate.
+      # -------------------------------------------------------------------------
+      - name: Sonar analysis (branch)
+        if: github.event_name == 'push'
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BACKEND }}
+        run: |
+          mvn --batch-mode sonar:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY_BACKEND }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN_BACKEND }} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=${GITHUB_WORKSPACE}/target/site/jacoco/jacoco.xml \
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.sources=src/main/java \
+            -Dsonar.tests=src/test/java \
+            -Dsonar.exclusions="**/ComunicacionApplication.java,**/infrastructure/persistence/**,**/infrastructure/config/**,**/infrastructure/security/**,**/infrastructure/backplane/**" \
+            -Dsonar.coverage.exclusions="**/ComunicacionApplication.java,**/infrastructure/persistence/**,**/infrastructure/config/**,**/infrastructure/security/**,**/infrastructure/web/dto/**,**/infrastructure/backplane/**,**/infrastructure/web/ComunicacionWebSocketController.java"
+
+      - name: Sonar analysis (pull request)
+        if: github.event_name == 'pull_request'
+        continue-on-error: true
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN_BACKEND }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mvn --batch-mode sonar:sonar \
+            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY_BACKEND }} \
+            -Dsonar.organization=${{ secrets.SONAR_ORGANIZATION }} \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.token=${{ secrets.SONAR_TOKEN_BACKEND }} \
+            -Dsonar.coverage.jacoco.xmlReportPaths=${GITHUB_WORKSPACE}/target/site/jacoco/jacoco.xml \
+            -Dsonar.java.binaries=target/classes \
+            -Dsonar.sources=src/main/java \
+            -Dsonar.tests=src/test/java \
+            -Dsonar.exclusions="**/ComunicacionApplication.java,**/infrastructure/persistence/**,**/infrastructure/config/**,**/infrastructure/security/**,**/infrastructure/backplane/**" \
+            -Dsonar.coverage.exclusions="**/ComunicacionApplication.java,**/infrastructure/persistence/**,**/infrastructure/config/**,**/infrastructure/security/**,**/infrastructure/web/dto/**,**/infrastructure/backplane/**,**/infrastructure/web/ComunicacionWebSocketController.java" \
+            -Dsonar.pullrequest.key=${{ github.event.pull_request.number }} \
+            -Dsonar.pullrequest.branch=${{ github.head_ref }} \
+            -Dsonar.pullrequest.base=${{ github.base_ref }}
+
+      - name: Build Docker image (verify Dockerfile works)
+        if: github.event_name == 'pull_request'
+        run: docker build -t ${{ env.IMAGE_NAME }}:ci .
+
+  push-image:
+    needs: build-and-test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CD_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Login to ECR
+        run: |
+          aws ecr get-login-password --region ${{ vars.AWS_REGION }} \
+            | docker login --username AWS --password-stdin ${{ vars.ECR_REGISTRY }}
+
+      - name: Compute image tag (short SHA)
+        id: meta
+        run: echo "tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      # Idempotencia: los repos ECR aqui tienen tags inmutables. Si este tag ya
+      # fue publicado (re-run del workflow via "Re-run all jobs", no solo el job
+      # fallido), se salta build/push y el deploy reutiliza la imagen existente.
+      - name: Check if image tag already exists in ECR
+        id: check-image
+        run: |
+          if aws ecr describe-images \
+              --repository-name ${{ env.IMAGE_NAME }} \
+              --image-ids imageTag=${{ steps.meta.outputs.tag }} \
+              --region ${{ vars.AWS_REGION }} >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build and push
+        if: steps.check-image.outputs.exists == 'false'
+        run: |
+          IMAGE=${{ vars.ECR_REGISTRY }}/${{ env.IMAGE_NAME }}
+          docker build -t $IMAGE:${{ steps.meta.outputs.tag }} .
+          docker push $IMAGE:${{ steps.meta.outputs.tag }}
+
+      - name: Skip push (tag already exists)
+        if: steps.check-image.outputs.exists == 'true'
+        run: echo "Tag ${{ steps.meta.outputs.tag }} already exists in ${{ env.IMAGE_NAME }} — reusing existing image."
+
+  deploy:
+    needs: push-image
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_CD_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Set up kubeconfig
+        run: aws eks update-kubeconfig --name ${{ vars.EKS_CLUSTER_NAME }} --region ${{ vars.AWS_REGION }}
+
+      - name: Deploy (helm upgrade, gated by --wait)
+        run: |
+          helm upgrade communication ./deploy \
+            --install \
+            --namespace patricia-app \
+            --set image.repository=${{ vars.ECR_REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${{ needs.push-image.outputs.image_tag }} \
+            --wait --timeout 8m
+
+      - name: Smoke check
+        run: |
+          kubectl run smoke-communication-$GITHUB_RUN_ID --namespace patricia-app \
+            --image=curlimages/curl:8.8.0 --restart=Never --rm -i --quiet \
+            --command -- curl -sf --retry 10 --retry-delay 6 --retry-all-errors \
+            http://communication.patricia-app.svc.cluster.local:8084/actuator/health

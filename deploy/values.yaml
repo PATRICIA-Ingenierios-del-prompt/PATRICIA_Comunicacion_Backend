@@ -1,0 +1,69 @@
+# Defaults para el chart de Communication. El job de CD sobreescribe
+# image.repository e image.tag en cada deploy (fijado al SHA corto del commit);
+# todo lo demas se edita aqui y se versiona junto con el codigo que configura.
+#
+# NAMING: infra usa "communication" (ingles) en TODO -- ECR, IRSA,
+# patricia-dev/communication/postgres, backplane channel
+# patricia:backplane:communication. Por eso los recursos K8s de este chart
+# tambien se llaman "communication", aunque spring.application.name siga siendo
+# "comunicacion" (nombre local del proyecto, cosmético; no afecta al deploy).
+#
+# DB: Communication usa Neon (Postgres serverless externo), NO RDS - el secreto
+# en Secrets Manager es patricia-dev/communication/postgres, con la MISMA forma
+# SPRING_DATASOURCE_URL/USERNAME/PASSWORD que ya usan Parches/Location.
+#
+# SOCKET MS: Communication esta en var.socket_services (infra), o sea que
+# necesita el backplane Redis (Cluster #2) ademas del cache Redis (Cluster #1).
+# El SecurityGroupPolicy del tier "socket" (patricia-app-socket-pods) ya existe
+# en Ulink_Infra desde el deploy de Location (2026-07-11), asi que los pods de
+# este chart obtienen la ruta de red al Cluster #2 automaticamente por la label
+# patricia.io/sg-tier: socket -- no requiere trabajo de Terraform adicional.
+
+image:
+  repository: ""            # set by CD: <account>.dkr.ecr.<region>.amazonaws.com/patricia-dev/communication
+  tag: ""                   # set by CD: short commit SHA
+  pullPolicy: IfNotPresent
+
+replicaCount: 2
+
+serviceAccount:
+  # Reutiliza el rol IRSA pre-provisionado (module.eks.service_irsa["communication"]).
+  # Sin policy de permisos todavia (Communication no llama APIs de AWS via IRSA
+  # hoy - Neon/Redis/MQ se alcanzan por Security Group, no IAM). Dejar vacio
+  # hasta que se necesite una llamada real a un API de AWS via IRSA.
+  roleArn: ""
+
+config:
+  # No sensible.
+  # --- Servicios internos ---
+  parchesCoreUrl: "http://parche-core:8083"
+  # --- Backplane (Redis Cluster #2, pub/sub compartido entre MS de sockets) ---
+  # Habilitado desde el arranque: el SecurityGroupPolicy del tier "socket" ya
+  # existe (aplicado con Location); TLS en el Lettuce factory tambien esta
+  # cubierto por BackplaneConfig con useSsl() + disablePeerVerification().
+  backplaneEnabled: "true"
+  backplaneChannel: "patricia:backplane:communication"
+
+externalSecrets:
+  clusterSecretStore: patricia-aws-secrets-manager
+  prefix: "patricia-dev"
+  # Todos los secretos referenciados ya existen en AWS Secrets Manager
+  # (confirmado via aws secretsmanager list-secrets):
+  #   patricia-dev/amazon-mq              -> SPRING_RABBITMQ_ADDRESSES/USERNAME/PASSWORD
+  #   patricia-dev/cache-redis            -> REDIS_HOST/REDIS_PORT/REDIS_PASSWORD
+  #   patricia-dev/backplane-redis        -> BACKPLANE_REDIS_HOST/PORT/PASSWORD
+  #   patricia-dev/communication/postgres -> SPRING_DATASOURCE_URL/USERNAME/PASSWORD
+  #
+  # No hay secretos Communication-especificos por crear (a diferencia de Location
+  # que necesito LOCATION_ENCRYPTION_SECRET). El jwt.secret sigue con default
+  # local mientras la SecurityConfig este en modo permitAll -- ver TODO en
+  # SecurityConfig.java para cuando se active JWT.
+
+resources:
+  requests: { cpu: 500m, memory: 768Mi }
+  limits:   { cpu: "1",  memory: 1Gi }
+
+hpa:
+  minReplicas: 2
+  maxReplicas: 4
+  targetCPUUtilizationPercentage: 70

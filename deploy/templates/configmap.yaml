@@ -1,0 +1,12 @@
+# Configuracion no sensible. Credenciales de RabbitMQ/Postgres(Neon)/Redis cache/
+# Redis backplane vienen del Secret communication-secrets sincronizado por el
+# ExternalSecret (ver externalsecret.yaml).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: communication-config
+  namespace: patricia-app
+data:
+  PARCHES_CORE_URL: {{ .Values.config.parchesCoreUrl | quote }}
+  BACKPLANE_ENABLED: {{ .Values.config.backplaneEnabled | quote }}
+  BACKPLANE_CHANNEL: {{ .Values.config.backplaneChannel | quote }}

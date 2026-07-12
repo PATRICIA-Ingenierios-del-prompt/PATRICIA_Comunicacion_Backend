@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: communication
+  namespace: patricia-app
+  # patricia.io/sg-tier: socket (NO "standard"). Communication esta en
+  # var.socket_services (infra) y necesita ademas del SG eks_pods el SG
+  # socket_ms_pods para alcanzar el backplane Redis (Cluster #2, Sec 4.1).
+  # El SecurityGroupPolicy patricia-app-socket-pods (en Ulink_Infra/
+  # security-group-policy.tf) ya asigna estos SGs a pods con esta label.
+  labels: { app: communication, patricia.io/sg-tier: socket }
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels: { app: communication }
+  template:
+    metadata:
+      labels: { app: communication, patricia.io/sg-tier: socket }
+    spec:
+      serviceAccountName: communication
+      containers:
+        - name: communication
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8084
+          envFrom:
+            - configMapRef: { name: communication-config }
+            - secretRef:    { name: communication-secrets }
+          # SecurityConfig.java hace permitAll de /actuator/health, asi que
+          # el filter chain de Spring Security no bloquea los probes.
+          # spring-boot-starter-actuator ya esta en pom.xml (verificado).
+          startupProbe:
+            httpGet: { path: /actuator/health, port: 8084 }
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 30
+          readinessProbe:
+            httpGet: { path: /actuator/health, port: 8084 }
+            periodSeconds: 10
+            timeoutSeconds: 3
+          livenessProbe:
+            httpGet: { path: /actuator/health/liveness, port: 8084 }
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
