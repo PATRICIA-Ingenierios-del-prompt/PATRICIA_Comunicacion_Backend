@@ -1,5 +1,7 @@
 package com.patricia.comunicacion.infrastructure.config;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.amqp.core.Binding;
 import org.springframework.amqp.core.BindingBuilder;
 import org.springframework.amqp.core.Queue;
@@ -124,10 +126,21 @@ public class RabbitMQConfig {
      * <p>
      * Esta misma línea debe agregarse también en el jsonMessageConverter()
      * de Parches para que la comunicación funcione en ambos sentidos.
+     * <p>
+     * IGNORAR PROPIEDADES DESCONOCIDAS: Parches publica ParcheMemberJoinedEvent
+     * con un campo adicional "category" (ParcheCategory) que este servicio no
+     * modela porque no lo necesita. Con el ObjectMapper por defecto de Jackson
+     * (FAIL_ON_UNKNOWN_PROPERTIES=true), cualquier campo del lado emisor que no
+     * exista en la clase local revienta la deserialización — el listener
+     * "parche.member.joined" rechazaría TODOS los mensajes en producción.
+     * Deshabilitarlo hace la integración tolerante a que Parches agregue
+     * campos nuevos sin que Comunicación tenga que espejarlos todos.
      */
     @Bean
     public MessageConverter jsonMessageConverter() {
-        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+        Jackson2JsonMessageConverter converter = new Jackson2JsonMessageConverter(mapper);
         converter.setTypePrecedence(Jackson2JavaTypeMapper.TypePrecedence.INFERRED);
         return converter;
     }
