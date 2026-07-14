@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: comunicacion-postgres
     ports:
       - "5432:5432"
     environment:
@@ -14,9 +15,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - comunicacion-net
 
   redis:
     image: redis:7-alpine
+    container_name: comunicacion-redis
     ports:
       - "6379:6379"
     healthcheck:
@@ -24,9 +28,12 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    networks:
+      - comunicacion-net
 
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
+    container_name: comunicacion-rabbitmq
     ports:
       - "5672:5672"     # AMQP
       - "15672:15672"   # Management UI
@@ -38,6 +45,48 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
+    networks:
+      - comunicacion-net
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: comunicacion-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/comunicacion_rt
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: postgres
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      # ElastiCache (prod) exige TLS -- redis:7-alpine local no lo soporta.
+      # BackplaneConfig ahora respeta este flag (antes forzaba useSsl() siempre
+      # y esta app nunca podia levantar via docker-compose).
+      REDIS_SSL_ENABLED: "false"
+      SPRING_RABBITMQ_ADDRESSES: amqp://guest:guest@rabbitmq:5672
+      SPRING_RABBITMQ_USERNAME: guest
+      SPRING_RABBITMQ_PASSWORD: guest
+      BACKPLANE_ENABLED: "false"
+      # Si tambien corres Parches localmente, levantalo en esta misma red
+      # (docker network connect comunicacion-net <container_parches>) o cambia
+      # esta URL por la IP/host donde escuche su API REST.
+      PARCHES_CORE_URL: http://host.docker.internal:8083
+      JWT_SECRET: patricia2025secretkeyparahmac256
+    ports:
+      - "8084:8084"
+    networks:
+      - comunicacion-net
+
+networks:
+  comunicacion-net:
+    driver: bridge
 
 volumes:
   postgres_data:
