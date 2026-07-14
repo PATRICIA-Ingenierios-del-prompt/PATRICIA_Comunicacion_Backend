@@ -41,8 +41,9 @@ public class BackplaneConfig {
     public LettuceConnectionFactory redisConnectionFactory(
             @Value("${spring.data.redis.host}") String host,
             @Value("${spring.data.redis.port}") int port,
-            @Value("${spring.data.redis.password:}") String password) {
-        return connectionFactory(host, port, password);
+            @Value("${spring.data.redis.password:}") String password,
+            @Value("${spring.data.redis.ssl.enabled:true}") boolean sslEnabled) {
+        return connectionFactory(host, port, password, sslEnabled);
     }
 
     @Bean
@@ -60,7 +61,8 @@ public class BackplaneConfig {
         return connectionFactory(
                 props.getRedis().getHost(),
                 props.getRedis().getPort(),
-                props.getRedis().getPassword());
+                props.getRedis().getPassword(),
+                props.getRedis().isSslEnabled());
     }
 
     @Bean
@@ -101,22 +103,29 @@ public class BackplaneConfig {
 
     // ── Helper ──────────────────────────────────────────────────────────────
 
-    private LettuceConnectionFactory connectionFactory(String host, int port, String password) {
+    private LettuceConnectionFactory connectionFactory(String host, int port, String password, boolean sslEnabled) {
         RedisStandaloneConfiguration config = new RedisStandaloneConfiguration(host, port);
         if (password != null && !password.isBlank()) {
             config.setPassword(password);
         }
         // Ambos clusters ElastiCache (cache y backplane) tienen transit_encryption
         // habilitado en Ulink_Infra (elasticache-cache hardcoded true; backplane
-        // via var.backplane_tls_enabled con default true). Sin useSsl() aqui, el
-        // handshake TLS falla y el pod queda unready. disablePeerVerification()
-        // porque los certificados AWS-managed no matchean el hostname master.*
-        // sin configurar el truststore del CA de ElastiCache -- el transporte
-        // sigue cifrado, solo no se autentica el servidor.
-        LettuceClientConfiguration clientConfig = LettuceClientConfiguration.builder()
-                .useSsl()
-                .disablePeerVerification()
-                .build();
-        return new LettuceConnectionFactory(config, clientConfig);
+        // via var.backplane_tls_enabled con default true) -- por eso el default
+        // de sslEnabled es true (K8s/prod no necesita tocar nada). Sin useSsl(),
+        // el handshake TLS falla contra ElastiCache y el pod queda unready.
+        // disablePeerVerification() porque los certificados AWS-managed no
+        // matchean el hostname master.* sin configurar el truststore del CA de
+        // ElastiCache -- el transporte sigue cifrado, solo no se autentica el
+        // servidor.
+        //
+        // sslEnabled=false es para docker-compose/CI locales, donde el Redis es
+        // redis:7-alpine sin TLS: forzar useSsl() ahi rompe la conexión (ver
+        // REDIS_SSL_ENABLED en docker-compose.yml y .github/workflows/CI.yml).
+        LettuceClientConfiguration.LettuceClientConfigurationBuilder builder =
+                LettuceClientConfiguration.builder();
+        if (sslEnabled) {
+            builder.useSsl().disablePeerVerification();
+        }
+        return new LettuceConnectionFactory(config, builder.build());
     }
 }

@@ -67,6 +67,7 @@ jobs:
           SPRING_RABBITMQ_PASSWORD: guest
           REDIS_HOST: localhost
           REDIS_PORT: 6379
+          REDIS_SSL_ENABLED: "false"
 
       # -------------------------------------------------------------------------
       # SonarCloud quality gate.
