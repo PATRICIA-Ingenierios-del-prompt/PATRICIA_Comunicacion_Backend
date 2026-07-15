@@ -34,12 +34,32 @@ public class RedisBackplanePublisher {
      * @param payload     objeto a serializar — debe ser serializable por Jackson
      */
     public void publish(String destination, Object payload) {
+        publishInternal(destination, payload, null);
+    }
+
+    /**
+     * Igual que {@link #publish}, pero para un envío dirigido a un usuario
+     * específico (equivalente a {@code convertAndSendToUser}). Todos los pods
+     * reciben el mensaje por Redis; solo el pod donde vive la sesión STOMP de
+     * ese usuario lo entrega, los demás lo descartan sin efecto.
+     *
+     * @param targetUserId  id del usuario destino (claim "sub" del JWT)
+     * @param destination   destino relativo, ej. "/queue/voice-signal"
+     * @param payload       objeto a serializar
+     */
+    public void publishToUser(String targetUserId, String destination, Object payload) {
+        publishInternal(destination, payload, targetUserId);
+    }
+
+    private void publishInternal(String destination, Object payload, String targetUserId) {
         try {
             BackplaneEnvelope envelope = new BackplaneEnvelope(
                     destination,
-                    objectMapper.valueToTree(payload));
+                    objectMapper.valueToTree(payload),
+                    targetUserId);
             backplaneRedis.convertAndSend(channel, objectMapper.writeValueAsString(envelope));
-            log.debug("Backplane published [channel={}, destination={}]", channel, destination);
+            log.debug("Backplane published [channel={}, destination={}, targetUserId={}]",
+                    channel, destination, targetUserId);
         } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
             throw new IllegalStateException(
                     "Backplane payload is not serializable: " + payload.getClass(), e);
