@@ -13,8 +13,11 @@ import java.nio.charset.StandardCharsets;
  * STOMP local del pod.
  *
  * Un mensaje malformado se descarta con WARN — nunca tumba el listener container.
- * Solo se retransmiten broadcasts (/topic/**); los mensajes dirigidos a una
- * sesión (/user/queue/**) NO pasan por el backplane (ver spec sección 5).
+ * Si el envelope trae targetUserId, se entrega como mensaje dirigido
+ * (convertAndSendToUser) -- solo el pod donde vive la sesión STOMP de ese
+ * usuario lo entrega de verdad; en los demás pods, Spring simplemente no
+ * encuentra sesión local y no hace nada. Sin targetUserId, se trata como
+ * broadcast normal (/topic/**).
  */
 @Slf4j
 public class BackplaneStompRelay implements MessageListener {
@@ -41,8 +44,15 @@ public class BackplaneStompRelay implements MessageListener {
                 return;
             }
 
-            messagingTemplate.convertAndSend(envelope.destination(), envelope.payload());
-            log.debug("Backplane relayed [destination={}]", envelope.destination());
+            if (envelope.targetUserId() != null) {
+                messagingTemplate.convertAndSendToUser(
+                        envelope.targetUserId(), envelope.destination(), envelope.payload());
+                log.debug("Backplane relayed to user [targetUserId={}, destination={}]",
+                        envelope.targetUserId(), envelope.destination());
+            } else {
+                messagingTemplate.convertAndSend(envelope.destination(), envelope.payload());
+                log.debug("Backplane relayed [destination={}]", envelope.destination());
+            }
 
         } catch (Exception ex) {
             log.warn("Failed to relay backplane message: {}", ex.getMessage());

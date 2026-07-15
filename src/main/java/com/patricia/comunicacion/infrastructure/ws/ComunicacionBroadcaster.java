@@ -23,6 +23,11 @@ import org.springframework.stereotype.Component;
  *   messagingTemplate.convertAndSend("/topic/chat/" + parcheId, payload);
  * Por:
  *   broadcaster.broadcast("/topic/chat/" + parcheId, payload);
+ *
+ * Para mensajes dirigidos a un usuario (antes: convertAndSendToUser), usar
+ * sendToUser(...) en vez de llamar a messagingTemplate directamente -- así
+ * también cruzan pods cuando el backplane está activo (necesario para
+ * señalización WebRTC punto a punto: offer/answer/ICE candidates).
  */
 @Slf4j
 @Component
@@ -57,6 +62,37 @@ public class ComunicacionBroadcaster {
         }
         // Sin backplane o con fallo: emitir localmente
         localBroadcast(destination, payload);
+    }
+
+    /**
+     * Envía un mensaje dirigido a un usuario específico, cruzando pods si el
+     * backplane está activo (necesario para señalización WebRTC: sin esto,
+     * el offer/answer/ICE solo llega si emisor y destinatario terminan en
+     * el mismo pod, lo que con {@code minReplicas > 1} no está garantizado
+     * y falla en silencio -- cada usuario queda esperando participantes sin
+     * ningún error visible).
+     *
+     * @param targetUserId  id del usuario destino (claim "sub" del JWT)
+     * @param destination   destino relativo, ej. "/queue/voice-signal"
+     * @param payload       body del mensaje
+     */
+    public void sendToUser(String targetUserId, String destination, Object payload) {
+        RedisBackplanePublisher publisher = backplane.getIfAvailable();
+        if (publisher != null) {
+            try {
+                publisher.publishToUser(targetUserId, destination, payload);
+                return;
+            } catch (RuntimeException ex) {
+                log.warn("Backplane publishToUser failed for user {} — falling back to local send: {}",
+                        targetUserId, ex.getMessage());
+            }
+        }
+        // Sin backplane o con fallo: enviar solo localmente (mismo pod)
+        try {
+            messagingTemplate.convertAndSendToUser(targetUserId, destination, payload);
+        } catch (RuntimeException ex) {
+            log.warn("Local sendToUser also failed for user {}: {}", targetUserId, ex.getMessage());
+        }
     }
 
     private void localBroadcast(String destination, Object payload) {

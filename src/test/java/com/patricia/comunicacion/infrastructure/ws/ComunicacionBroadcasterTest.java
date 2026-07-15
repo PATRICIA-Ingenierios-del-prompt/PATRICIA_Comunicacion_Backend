@@ -75,4 +75,59 @@ class ComunicacionBroadcasterTest {
 
         assertDoesNotThrow(() -> broadcaster.broadcast("/topic/chat/parche-001", "payload"));
     }
+
+    @Test
+    @DisplayName("sendToUser debería usar backplane cuando está disponible")
+    void sendToUser_shouldUseBackplaneWhenAvailable() {
+        when(backplaneProvider.getIfAvailable()).thenReturn(backplanePublisher);
+
+        ComunicacionBroadcaster broadcaster =
+                new ComunicacionBroadcaster(messagingTemplate, backplaneProvider);
+
+        broadcaster.sendToUser("user-123", "/queue/voice-signal", "payload");
+
+        verify(backplanePublisher).publishToUser("user-123", "/queue/voice-signal", "payload");
+        verifyNoInteractions(messagingTemplate);
+    }
+
+    @Test
+    @DisplayName("sendToUser debería usar messagingTemplate local cuando backplane no está disponible")
+    void sendToUser_shouldUseLocalWhenBackplaneUnavailable() {
+        when(backplaneProvider.getIfAvailable()).thenReturn(null);
+
+        ComunicacionBroadcaster broadcaster =
+                new ComunicacionBroadcaster(messagingTemplate, backplaneProvider);
+
+        broadcaster.sendToUser("user-123", "/queue/voice-signal", "payload");
+
+        verify(messagingTemplate).convertAndSendToUser("user-123", "/queue/voice-signal", "payload");
+    }
+
+    @Test
+    @DisplayName("sendToUser debería hacer fallback local cuando backplane falla")
+    void sendToUser_shouldFallbackToLocalWhenBackplaneFails() {
+        when(backplaneProvider.getIfAvailable()).thenReturn(backplanePublisher);
+        doThrow(new RuntimeException("Redis error"))
+                .when(backplanePublisher).publishToUser(anyString(), anyString(), any());
+
+        ComunicacionBroadcaster broadcaster =
+                new ComunicacionBroadcaster(messagingTemplate, backplaneProvider);
+
+        broadcaster.sendToUser("user-123", "/queue/voice-signal", "payload");
+
+        verify(messagingTemplate).convertAndSendToUser("user-123", "/queue/voice-signal", "payload");
+    }
+
+    @Test
+    @DisplayName("sendToUser debería manejar errores del messagingTemplate local sin lanzar excepción")
+    void sendToUser_shouldHandleLocalSendError() {
+        when(backplaneProvider.getIfAvailable()).thenReturn(null);
+        doThrow(new RuntimeException("STOMP error"))
+                .when(messagingTemplate).convertAndSendToUser(anyString(), anyString(), any(Object.class));
+
+        ComunicacionBroadcaster broadcaster =
+                new ComunicacionBroadcaster(messagingTemplate, backplaneProvider);
+
+        assertDoesNotThrow(() -> broadcaster.sendToUser("user-123", "/queue/voice-signal", "payload"));
+    }
 }
