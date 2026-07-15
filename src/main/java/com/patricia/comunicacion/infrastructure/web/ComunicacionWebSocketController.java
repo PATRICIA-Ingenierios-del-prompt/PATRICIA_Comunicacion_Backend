@@ -12,7 +12,6 @@ import org.springframework.messaging.handler.annotation.DestinationVariable;
 import org.springframework.messaging.handler.annotation.MessageMapping;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
-import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
 import java.util.UUID;
@@ -42,7 +41,6 @@ public class ComunicacionWebSocketController {
 
     private final SendMessageUseCase sendMessageUseCase;
     private final ManageVoiceSessionUseCase manageVoiceSessionUseCase;
-    private final SimpMessagingTemplate messagingTemplate;
     private final ComunicacionBroadcaster broadcaster;
 
     // ── Chat ────────────────────────────────────────────────────────
@@ -103,8 +101,7 @@ public class ComunicacionWebSocketController {
         signal.setSenderUserId(getAttribute(headerAccessor, "userId"));
 
         if (signal.getTargetUserId() != null) {
-            messagingTemplate.convertAndSendToUser(
-                    signal.getTargetUserId(), "/queue/voice-signal", signal);
+            broadcaster.sendToUser(signal.getTargetUserId(), "/queue/voice-signal", signal);
         } else {
             broadcaster.broadcast(VOICE_TOPIC + parcheId, signal);
         }
