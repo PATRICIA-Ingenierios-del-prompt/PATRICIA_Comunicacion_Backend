@@ -11,15 +11,16 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.messaging.Message;
 import org.springframework.messaging.MessageHeaders;
 import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
+import org.springframework.messaging.support.GenericMessage;
 import org.springframework.web.socket.messaging.SessionDisconnectEvent;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -64,9 +65,15 @@ class VoiceSessionDisconnectListenerTest {
     }
 
     @Test
-    @DisplayName("no debería hacer nada si el sessionId es nulo")
-    void onDisconnect_withNullSessionId_doesNothing() {
-        SessionDisconnectEvent event = buildDisconnectEvent(null);
+    @DisplayName("no debería hacer nada si el sessionId en los headers es nulo")
+    void onDisconnect_withNullSessionIdInHeaders_doesNothing() {
+        // SessionDisconnectEvent exige un sessionId no-nulo en el constructor,
+        // pero el listener lee el sessionId de los headers del mensaje, no del
+        // evento. Si los headers no lo traen, getSessionId() devuelve null.
+        Map<String, Object> headers = new HashMap<>();
+        // No ponemos SimpMessageHeaderAccessor.SESSION_ID_HEADER → getSessionId() = null
+        Message<byte[]> message = new GenericMessage<>(new byte[0], new MessageHeaders(headers));
+        SessionDisconnectEvent event = new SessionDisconnectEvent(this, message, "dummy-not-null", null);
 
         listener.onDisconnect(event);
 
@@ -75,15 +82,10 @@ class VoiceSessionDisconnectListenerTest {
         verifyNoInteractions(broadcaster);
     }
 
-    @SuppressWarnings("unchecked")
     private SessionDisconnectEvent buildDisconnectEvent(String stompSessionId) {
-        Map<String, Object> headers = new java.util.HashMap<>();
-        if (stompSessionId != null) {
-            headers.put(SimpMessageHeaderAccessor.SESSION_ID_HEADER, stompSessionId);
-        }
-        Message<byte[]> message = mock(Message.class);
-        when(message.getHeaders()).thenReturn(new MessageHeaders(headers));
-        when(message.getPayload()).thenReturn(new byte[0]);
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(SimpMessageHeaderAccessor.SESSION_ID_HEADER, stompSessionId);
+        Message<byte[]> message = new GenericMessage<>(new byte[0], new MessageHeaders(headers));
         return new SessionDisconnectEvent(this, message, stompSessionId, null);
     }
 }
