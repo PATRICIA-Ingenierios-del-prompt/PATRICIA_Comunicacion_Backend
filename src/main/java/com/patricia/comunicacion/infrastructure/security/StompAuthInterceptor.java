@@ -58,6 +58,15 @@ public class StompAuthInterceptor implements ChannelInterceptor {
             String userId   = claims.getSubject();
             String username = claims.get("username", String.class);
 
+            // Prioridad para el nombre a mostrar:
+            // 1. Header X-Username que manda el frontend (nombre real del perfil)
+            // 2. Claim "username" del JWT (si Auth lo incluye)
+            // 3. Fallback al userId (UUID) si no hay nada mejor
+            String displayHeader = accessor.getFirstNativeHeader("X-Username");
+            if (displayHeader != null && !displayHeader.isBlank()) {
+                username = displayHeader;
+            }
+
             if (userId == null || userId.isBlank()) {
                 log.warn("WS CONNECT rechazado: claim 'sub' vacío en el token");
                 return null;
