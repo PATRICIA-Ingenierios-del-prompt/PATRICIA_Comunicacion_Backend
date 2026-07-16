@@ -39,6 +39,11 @@ public class ManageVoiceChannelService implements ManageVoiceSessionUseCase {
         }
         membershipVerification.verify(parcheId, userId);
 
+        // Limpiar sesiones activas previas del mismo usuario en este parche
+        // (puede quedar una sesión huérfana si el usuario cerró el navegador
+        // sin hacer leave, o si el DisconnectListener no alcanzó a limpiarla).
+        voiceSessionRepository.deactivate(parcheId, userId);
+
         List<VoiceSession> activeBeforeJoin = voiceSessionRepository.findActiveByParcheId(parcheId);
 
         VoiceSession session = VoiceSession.builder()
