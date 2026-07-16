@@ -44,13 +44,19 @@ public class BackplaneStompRelay implements MessageListener {
                 return;
             }
 
+            // Convertir el JsonNode a su representación String para evitar que
+            // SimpMessagingTemplate lo re-serialice envolviendo los campos en
+            // una capa extra de JSON (lo que causa que el frontend reciba
+            // signalType/senderUserId como undefined).
+            String payloadStr = objectMapper.writeValueAsString(envelope.payload());
+
             if (envelope.targetUserId() != null) {
                 messagingTemplate.convertAndSendToUser(
-                        envelope.targetUserId(), envelope.destination(), envelope.payload());
+                        envelope.targetUserId(), envelope.destination(), payloadStr);
                 log.debug("Backplane relayed to user [targetUserId={}, destination={}]",
                         envelope.targetUserId(), envelope.destination());
             } else {
-                messagingTemplate.convertAndSend(envelope.destination(), envelope.payload());
+                messagingTemplate.convertAndSend(envelope.destination(), payloadStr);
                 log.debug("Backplane relayed [destination={}]", envelope.destination());
             }
 
