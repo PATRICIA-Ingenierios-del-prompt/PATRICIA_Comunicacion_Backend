@@ -12,6 +12,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -125,5 +127,29 @@ class ParchesMembershipAdapterTest {
         String name = adapter.getChannelName(PARCHE_ID);
 
         assertThat(name).isEqualTo("chat privado");
+    }
+
+    @Test
+    @DisplayName("getChannelName debería devolver el nombre del parche desde Parches Core")
+    void getChannelName_shouldReturnNameFromParchesCore() throws Exception {
+        HttpServer server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/parches/" + PARCHE_ID, exchange -> {
+            String body = "{\"name\":\"Salsa Crew\",\"description\":\"\",\"category\":\"\",\"visibility\":\"PUBLIC\",\"status\":\"\",\"maxCapacity\":10,\"memberCount\":2}";
+            exchange.getResponseHeaders().set("Content-Type", "application/json");
+            exchange.sendResponseHeaders(200, body.getBytes().length);
+            exchange.getResponseBody().write(body.getBytes());
+            exchange.close();
+        });
+        server.start();
+        try {
+            int port = server.getAddress().getPort();
+            ParchesMembershipAdapter localAdapter = new ParchesMembershipAdapter(memberRepository, "http://localhost:" + port);
+
+            String name = localAdapter.getChannelName(PARCHE_ID);
+
+            assertThat(name).isEqualTo("Salsa Crew");
+        } finally {
+            server.stop(0);
+        }
     }
 }
