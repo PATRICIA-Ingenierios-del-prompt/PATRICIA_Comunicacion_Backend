@@ -19,10 +19,11 @@ public class UseCaseConfig {
     public SendMessageUseCase sendMessageUseCase(
             MessageRepository messageRepository,
             MembershipVerification membershipVerification,
+            MembershipProvisioning membershipProvisioning,
             MessageBroker messageBroker,
             EventPublisher eventPublisher) {
         return new SendMessageService(messageRepository, membershipVerification,
-                messageBroker, eventPublisher);
+                membershipProvisioning, messageBroker, eventPublisher);
     }
 
     @Bean

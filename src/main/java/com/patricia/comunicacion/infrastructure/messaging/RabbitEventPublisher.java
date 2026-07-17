@@ -11,6 +11,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
+import java.util.Set;
 
 /**
  * Publica todos los eventos de Comunicación al exchange "comunicacion.events".
@@ -26,17 +27,20 @@ public class RabbitEventPublisher implements EventPublisher {
     // ── Chat ─────────────────────────────────────────────────────────
 
     @Override
-    public void publishMessageSent(Message message) {
+    public void publishMessageSent(Message message, Set<String> recipientIds, String chatName) {
         try {
             var event = new ChatMessageSentEvent(
                     message.getId(),
                     message.getParcheId(),
+                    message.getParcheId(),
+                    chatName,
                     message.getSenderId(),
                     message.getSenderUsername(),
                     message.getContent(),
                     message.getFileUrl(),
                     message.getType().name(),
-                    message.getSentAt()
+                    message.getSentAt(),
+                    recipientIds
             );
             publish(RabbitMQConfig.CHAT_MESSAGE_SENT_ROUTING_KEY, event);
         } catch (Exception e) {

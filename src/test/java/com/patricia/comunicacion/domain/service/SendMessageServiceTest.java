@@ -5,6 +5,7 @@ import com.patricia.comunicacion.domain.model.Message;
 import com.patricia.comunicacion.domain.model.MessageType;
 import com.patricia.comunicacion.domain.port.out.EventPublisher;
 import com.patricia.comunicacion.domain.port.out.MessageBroker;
+import com.patricia.comunicacion.domain.port.out.MembershipProvisioning;
 import com.patricia.comunicacion.domain.port.out.MembershipVerification;
 import com.patricia.comunicacion.domain.port.out.MessageRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -15,6 +16,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.time.Instant;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -27,6 +29,7 @@ class SendMessageServiceTest {
 
     @Mock private MessageRepository messageRepository;
     @Mock private MembershipVerification membershipVerification;
+    @Mock private MembershipProvisioning membershipProvisioning;
     @Mock private MessageBroker messageBroker;
     @Mock private EventPublisher eventPublisher;
 
@@ -38,7 +41,7 @@ class SendMessageServiceTest {
     @BeforeEach
     void setUp() {
         service = new SendMessageService(messageRepository, membershipVerification,
-                messageBroker, eventPublisher);
+                membershipProvisioning, messageBroker, eventPublisher);
     }
 
     @Test
@@ -50,13 +53,15 @@ class SendMessageServiceTest {
                 .sentAt(Instant.now()).deleted(false).build();
 
         doNothing().when(membershipVerification).verify(PARCHE_ID, USER_ID);
+        when(membershipProvisioning.findMembers(PARCHE_ID)).thenReturn(Set.of(USER_ID, "user-other"));
+        when(membershipProvisioning.getChannelName(PARCHE_ID)).thenReturn("Parche test");
         when(messageRepository.save(any())).thenReturn(saved);
 
         Message result = service.execute(PARCHE_ID, USER_ID, "juandc", "Hola!", MessageType.TEXT);
 
         assertThat(result.getId()).isEqualTo("msg-789");
         verify(messageBroker).publish(PARCHE_ID, saved);
-        verify(eventPublisher).publishMessageSent(saved);
+        verify(eventPublisher).publishMessageSent(saved, Set.of("user-other"), "Parche test");
     }
 
     @Test
@@ -81,7 +86,7 @@ class SendMessageServiceTest {
 
         service.execute(PARCHE_ID, "SYSTEM", "PATRICI.A", "Juan se unió", MessageType.SYSTEM);
 
-        verify(eventPublisher, never()).publishMessageSent(any());
+        verify(eventPublisher, never()).publishMessageSent(any(), any(), any());
     }
 
     @Test
@@ -104,13 +109,15 @@ class SendMessageServiceTest {
                 .sentAt(Instant.now()).deleted(false).build();
 
         doNothing().when(membershipVerification).verify(PARCHE_ID, USER_ID);
+        when(membershipProvisioning.findMembers(PARCHE_ID)).thenReturn(Set.of(USER_ID, "user-other"));
+        when(membershipProvisioning.getChannelName(PARCHE_ID)).thenReturn("Parche test");
         when(messageRepository.save(any())).thenReturn(saved);
 
         Message result = service.executeWithFile(PARCHE_ID, USER_ID, "juandc",
                 "doc.pdf", MessageType.FILE, "https://storage.example.com/doc.pdf");
 
         assertThat(result.getFileUrl()).isEqualTo("https://storage.example.com/doc.pdf");
-        verify(eventPublisher).publishMessageSent(saved);
+        verify(eventPublisher).publishMessageSent(saved, Set.of("user-other"), "Parche test");
     }
 
     @Test
@@ -133,12 +140,14 @@ class SendMessageServiceTest {
                 .sentAt(Instant.now()).deleted(false).build();
 
         doNothing().when(membershipVerification).verify(PARCHE_ID, USER_ID);
+        when(membershipProvisioning.findMembers(PARCHE_ID)).thenReturn(Set.of(USER_ID, "user-other"));
+        when(membershipProvisioning.getChannelName(PARCHE_ID)).thenReturn("Parche test");
         when(messageRepository.save(any())).thenReturn(saved);
 
         Message result = service.executeWithFile(PARCHE_ID, USER_ID, "juandc",
                 "foto.jpg", MessageType.IMAGE, "https://storage.example.com/foto.jpg");
 
         assertThat(result.getType()).isEqualTo(MessageType.IMAGE);
-        verify(eventPublisher).publishMessageSent(saved);
+        verify(eventPublisher).publishMessageSent(saved, Set.of("user-other"), "Parche test");
     }
 }
