@@ -12,6 +12,8 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
+import java.util.Set;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
@@ -95,5 +97,33 @@ class ParchesMembershipAdapterTest {
 
         // No debe propagar la excepción — otra request concurrente ya insertó la fila
         adapter.ensureMember(PARCHE_ID, USER_ID);
+    }
+
+    @Test
+    @DisplayName("findMembers debería devolver los userIds del canal")
+    void findMembers_shouldReturnChannelMembers() {
+        when(memberRepository.findUserIdsByParcheId(PARCHE_ID)).thenReturn(Set.of("user-a", "user-b"));
+
+        Set<String> result = adapter.findMembers(PARCHE_ID);
+
+        assertThat(result).containsExactlyInAnyOrder("user-a", "user-b");
+    }
+
+    @Test
+    @DisplayName("findMembers debería devolver un conjunto vacío si el repositorio devuelve null")
+    void findMembers_shouldReturnEmptyWhenNull() {
+        when(memberRepository.findUserIdsByParcheId(PARCHE_ID)).thenReturn(null);
+
+        Set<String> result = adapter.findMembers(PARCHE_ID);
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
+    @DisplayName("getChannelName debería devolver 'chat privado' cuando Parches Core no responde")
+    void getChannelName_shouldReturnChatPrivadoWhenParchesCoreUnavailable() {
+        String name = adapter.getChannelName(PARCHE_ID);
+
+        assertThat(name).isEqualTo("chat privado");
     }
 }
