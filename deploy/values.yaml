@@ -27,11 +27,13 @@ image:
 replicaCount: 2
 
 serviceAccount:
-  # Reutiliza el rol IRSA pre-provisionado (module.eks.service_irsa["communication"]).
+  # Rol IRSA pre-provisionado (module.eks.service_irsa["communication"]).
   # Sin policy de permisos todavia (Communication no llama APIs de AWS via IRSA
-  # hoy - Neon/Redis/MQ se alcanzan por Security Group, no IAM). Dejar vacio
-  # hasta que se necesite una llamada real a un API de AWS via IRSA.
-  roleArn: ""
+  # hoy - Neon/Redis/MQ se alcanzan por Security Group, no IAM), pero el SA debe
+  # llevar la annotation igual para que el trust del rol quede activo desde ya.
+  # Verificado 2026-07-15 contra `terraform output -json service_irsa_role_arns`
+  # en Ulink_Infra.
+  roleArn: "arn:aws:iam::188701360691:role/patricia-dev-communication-irsa"
 
 config:
   # No sensible.

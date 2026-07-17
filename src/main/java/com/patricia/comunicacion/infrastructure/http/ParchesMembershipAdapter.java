@@ -1,8 +1,11 @@
 package com.patricia.comunicacion.infrastructure.http;
 
 import com.patricia.comunicacion.domain.exception.MembershipException;
+import com.patricia.comunicacion.domain.port.out.MembershipProvisioning;
 import com.patricia.comunicacion.domain.port.out.MembershipVerification;
+import com.patricia.comunicacion.infrastructure.persistence.entity.ParcheMemberEntity;
 import com.patricia.comunicacion.infrastructure.persistence.repository.ParcheMemberJpaRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -23,7 +26,7 @@ import org.springframework.web.client.RestClient;
  */
 @Slf4j
 @Component
-public class ParchesMembershipAdapter implements MembershipVerification {
+public class ParchesMembershipAdapter implements MembershipVerification, MembershipProvisioning {
 
     private final ParcheMemberJpaRepository memberRepository;
     private final RestClient restClient;
@@ -38,6 +41,23 @@ public class ParchesMembershipAdapter implements MembershipVerification {
     public void verify(String parcheId, String userId) {
         if (!memberRepository.existsByParcheIdAndUserId(parcheId, userId)) {
             throw new MembershipException(userId, parcheId);
+        }
+    }
+
+    @Override
+    public void ensureMember(String channelId, String userId) {
+        if (memberRepository.existsByParcheIdAndUserId(channelId, userId)) {
+            return;
+        }
+        ParcheMemberEntity entity = new ParcheMemberEntity();
+        entity.setParcheId(channelId);
+        entity.setUserId(userId);
+        try {
+            memberRepository.save(entity);
+        } catch (DataIntegrityViolationException e) {
+            // Carrera con otra request creando el mismo DM: el índice único
+            // idx_parche_member_lookup ya garantizó la fila. Idempotente.
+            log.debug("Miembro ya registrado [channelId={}, userId={}]", channelId, userId);
         }
     }
 
