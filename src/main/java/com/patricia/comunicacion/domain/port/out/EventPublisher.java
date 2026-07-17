@@ -16,7 +16,7 @@ public interface EventPublisher {
      * que mandar push a los miembros que no están conectados.
      * Routing key: chat.message.sent
      */
-    void publishMessageSent(Message message);
+    void publishMessageSent(Message message, java.util.Set<String> recipientIds, String chatName);
 
     // ── Voz ──────────────────────────────────────────────────────────
 

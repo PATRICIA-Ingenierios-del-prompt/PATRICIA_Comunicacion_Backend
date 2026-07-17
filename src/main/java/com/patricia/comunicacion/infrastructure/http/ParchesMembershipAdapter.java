@@ -11,6 +11,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.util.Collections;
+import java.util.Set;
+
 /**
  * Adaptador de membresía con dos fuentes distintas:
  * <p>
@@ -59,6 +62,28 @@ public class ParchesMembershipAdapter implements MembershipVerification, Members
             // idx_parche_member_lookup ya garantizó la fila. Idempotente.
             log.debug("Miembro ya registrado [channelId={}, userId={}]", channelId, userId);
         }
+    }
+
+    @Override
+    public Set<String> findMembers(String channelId) {
+        Set<String> userIds = memberRepository.findUserIdsByParcheId(channelId);
+        return userIds != null ? userIds : Collections.emptySet();
+    }
+
+    @Override
+    public String getChannelName(String channelId) {
+        try {
+            ParcheResponse response = restClient.get()
+                    .uri("/api/parches/{parcheId}", channelId)
+                    .retrieve()
+                    .body(ParcheResponse.class);
+            if (response != null && response.name() != null && !response.name().isBlank()) {
+                return response.name();
+            }
+        } catch (Exception e) {
+            log.debug("Parches Core no tiene el parche {} — asumiendo chat privado", channelId);
+        }
+        return "chat privado";
     }
 
     @Override

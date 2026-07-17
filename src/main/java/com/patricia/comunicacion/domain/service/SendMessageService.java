@@ -5,24 +5,30 @@ import com.patricia.comunicacion.domain.model.MessageType;
 import com.patricia.comunicacion.domain.port.in.SendMessageUseCase;
 import com.patricia.comunicacion.domain.port.out.EventPublisher;
 import com.patricia.comunicacion.domain.port.out.MessageBroker;
+import com.patricia.comunicacion.domain.port.out.MembershipProvisioning;
 import com.patricia.comunicacion.domain.port.out.MembershipVerification;
 import com.patricia.comunicacion.domain.port.out.MessageRepository;
 
 import java.time.Instant;
+import java.util.HashSet;
+import java.util.Set;
 
 public class SendMessageService implements SendMessageUseCase {
 
     private final MessageRepository messageRepository;
     private final MembershipVerification membershipVerification;
+    private final MembershipProvisioning membershipProvisioning;
     private final MessageBroker messageBroker;
     private final EventPublisher eventPublisher;
 
     public SendMessageService(MessageRepository messageRepository,
                                MembershipVerification membershipVerification,
+                               MembershipProvisioning membershipProvisioning,
                                MessageBroker messageBroker,
                                EventPublisher eventPublisher) {
         this.messageRepository = messageRepository;
         this.membershipVerification = membershipVerification;
+        this.membershipProvisioning = membershipProvisioning;
         this.messageBroker = messageBroker;
         this.eventPublisher = eventPublisher;
     }
@@ -62,7 +68,9 @@ public class SendMessageService implements SendMessageUseCase {
         messageBroker.publish(parcheId, saved);
 
         if (type != MessageType.SYSTEM) {
-            eventPublisher.publishMessageSent(saved);
+            Set<String> members = new HashSet<>(membershipProvisioning.findMembers(parcheId));
+            members.remove(senderId);
+            eventPublisher.publishMessageSent(saved, members, membershipProvisioning.getChannelName(parcheId));
         }
 
         return saved;

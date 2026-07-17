@@ -14,6 +14,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 import java.time.Instant;
+import java.util.Set;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.*;
@@ -42,7 +43,7 @@ class RabbitEventPublisherTest {
                 .senderUsername("david").content("Hola!").type(MessageType.TEXT)
                 .sentAt(Instant.now()).deleted(false).build();
 
-        publisher.publishMessageSent(message);
+        publisher.publishMessageSent(message, Set.of("user-002"), "Parche test");
 
         verify(rabbitTemplate).convertAndSend(
                 eq(RabbitMQConfig.COMUNICACION_EXCHANGE),
@@ -115,6 +116,6 @@ class RabbitEventPublisherTest {
         doThrow(new RuntimeException("RabbitMQ error")).when(rabbitTemplate)
                 .convertAndSend(anyString(), anyString(), any(Object.class));
 
-        assertDoesNotThrow(() -> publisher.publishMessageSent(message));
+        assertDoesNotThrow(() -> publisher.publishMessageSent(message, Set.of("user-002"), "Parche test"));
     }
 }
