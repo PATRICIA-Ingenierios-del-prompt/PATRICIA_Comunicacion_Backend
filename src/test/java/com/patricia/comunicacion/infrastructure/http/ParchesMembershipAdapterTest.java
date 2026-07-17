@@ -1,13 +1,16 @@
 package com.patricia.comunicacion.infrastructure.http;
 
 import com.patricia.comunicacion.domain.exception.MembershipException;
+import com.patricia.comunicacion.infrastructure.persistence.entity.ParcheMemberEntity;
 import com.patricia.comunicacion.infrastructure.persistence.repository.ParcheMemberJpaRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -58,5 +61,39 @@ class ParchesMembershipAdapterTest {
         boolean result = adapter.isParchePrivate(PARCHE_ID);
 
         assertThat(result).isTrue();
+    }
+
+    @Test
+    @DisplayName("ensureMember debería guardar la membresía si no existe")
+    void ensureMember_shouldSaveWhenNotExists() {
+        when(memberRepository.existsByParcheIdAndUserId(PARCHE_ID, USER_ID)).thenReturn(false);
+
+        adapter.ensureMember(PARCHE_ID, USER_ID);
+
+        ArgumentCaptor<ParcheMemberEntity> captor = ArgumentCaptor.forClass(ParcheMemberEntity.class);
+        verify(memberRepository).save(captor.capture());
+        assertThat(captor.getValue().getParcheId()).isEqualTo(PARCHE_ID);
+        assertThat(captor.getValue().getUserId()).isEqualTo(USER_ID);
+    }
+
+    @Test
+    @DisplayName("ensureMember debería ser idempotente si la membresía ya existe")
+    void ensureMember_shouldSkipWhenAlreadyExists() {
+        when(memberRepository.existsByParcheIdAndUserId(PARCHE_ID, USER_ID)).thenReturn(true);
+
+        adapter.ensureMember(PARCHE_ID, USER_ID);
+
+        verify(memberRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("ensureMember debería tolerar la carrera contra el índice único")
+    void ensureMember_shouldSwallowDataIntegrityViolation() {
+        when(memberRepository.existsByParcheIdAndUserId(PARCHE_ID, USER_ID)).thenReturn(false);
+        when(memberRepository.save(any(ParcheMemberEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate key"));
+
+        // No debe propagar la excepción — otra request concurrente ya insertó la fila
+        adapter.ensureMember(PARCHE_ID, USER_ID);
     }
 }
